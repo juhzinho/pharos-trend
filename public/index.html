@@ -33,7 +33,7 @@
     .chips button.on { color: #172033; background: var(--blue); border-color: transparent; }
     label { display: block; margin: 10px 0 4px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
     input, select { width: 100%; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(8,12,22,.72); }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid { display: grid; grid-template-columns: 1.3fr .7fr .8fr; gap: 8px; }
     .row { display: flex; gap: 8px; margin-top: 8px; }
     .btn { border: 0; border-radius: 999px; padding: 12px 16px; background: var(--blue); color: #172033; font-weight: 700; cursor: pointer; }
     .btn:disabled { opacity: .55; }
@@ -58,6 +58,7 @@
       .lead { margin: 6px 0 0; font-size: 15px; }
       .rules { margin-top: 8px; }
       .dock { order: -1; max-height: none; }
+      .grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -87,6 +88,10 @@
           <div>
             <label for="count" id="countL"></label>
             <input id="count" value="3" inputmode="numeric" />
+          </div>
+          <div>
+            <label for="minutes" id="minutesL"></label>
+            <input id="minutes" value="0" inputmode="numeric" />
           </div>
         </div>
         <div class="row"><button class="btn" id="go" type="submit"></button></div>

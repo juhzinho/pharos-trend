@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buttonLabel, EXAMPLES } from "../public/examples.js";
-import { append, moment, parseRule, review, runLength, sanitize } from "../public/trend.js";
+import { append, loadState, moment, note, parseRule, review, runLength, sanitize } from "../public/trend.js";
 
 function row(block, price) {
   return { block: String(block), price, at: "2026-10-24T02:25:00.000Z" };
@@ -19,7 +19,9 @@ test("the rule needs at least 3 checks", () => {
   assert.equal(parseRule("2", "down"), null);
   assert.equal(parseRule("3.5", "down"), null);
   assert.equal(parseRule("3", "sideways"), null);
-  assert.deepEqual(parseRule("4", "up"), { count: 4, direction: "up" });
+  assert.deepEqual(parseRule("4", "up"), { count: 4, direction: "up", minutes: 0 });
+  assert.equal(parseRule("3", "down", ""), null);
+  assert.equal(parseRule("3", "down", "1441"), null);
   assert.equal(review([], { count: "2", direction: "down" }).ok, false);
 });
 
@@ -95,7 +97,61 @@ test("a broken history is rejected", () => {
 });
 
 test("example buttons name the rule they fill", () => {
-  assert.deepEqual(EXAMPLES.map((row) => buttonLabel(row, "en")), ["Down, 3 checks", "Down, 4 checks", "Up, 3 checks"]);
-  assert.equal(buttonLabel(EXAMPLES[0], "pt"), "Queda, 3 leituras");
+  assert.deepEqual(EXAMPLES.map((row) => buttonLabel(row, "en")), [
+    "Down, 3 checks, 0 min",
+    "Down, 4 checks, 0 min",
+    "Up, 3 checks, 0 min",
+    "Down, 3 checks, 120 min",
+  ]);
+  assert.equal(buttonLabel(EXAMPLES[0], "pt"), "Queda, 3 leituras, 0 min");
   assert.equal(moment("2026-10-24T02:25:00.000Z"), "2026-10-24 02:25:00 UTC");
+});
+
+test("a later reversal keeps the moment the rule was met", () => {
+  const rule = { count: "3", direction: "down", minutes: "0" };
+  let observations = [];
+  ["1.000000", "0.990000", "0.980000", "1.020000"].forEach((price, index) => {
+    observations = append(observations, row(21080000 + index, price));
+  });
+  const before = review(observations.slice(0, 3), rule);
+  const marks = note({ observations: observations.slice(0, 3), marks: [] }, rule);
+  const after = review(observations, rule);
+  const kept = note({ observations, marks }, rule);
+  assert.equal(before.decision, "act");
+  assert.equal(after.decision, "wait");
+  assert.equal(after.metAt, null);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].block, "21080002");
+  const loaded = loadState(JSON.parse(JSON.stringify({ observations, marks: kept })));
+  assert.equal(loaded.marks[0].block, "21080002");
+  assert.equal(loaded.observations.length, 4);
+});
+
+test("three quick checks do not satisfy a 120 minute rule", () => {
+  const observations = [0, 1, 2].map((index) => ({
+    block: String(21080000 + index),
+    price: ["1.000000", "0.990000", "0.980000"][index],
+    at: `2026-10-24T02:0${index}:00.000Z`,
+  }));
+  const out = review(observations, { count: "3", direction: "down", minutes: "120" });
+  assert.equal(out.decision, "wait");
+  assert.equal(out.metAt, null);
+  assert.match(out.reason, /120 minutes/);
+});
+
+test("three checks spread over two hours confirm on the later check", () => {
+  const observations = ["2026-10-24T00:00:00.000Z", "2026-10-24T01:00:00.000Z", "2026-10-24T02:00:00.000Z"].map((at, index) => ({
+    block: String(21080000 + index),
+    price: ["1.000000", "0.990000", "0.980000"][index],
+    at,
+  }));
+  const out = review(observations, { count: "3", direction: "down", minutes: "120" });
+  assert.equal(out.decision, "act");
+  assert.equal(out.metAt.block, "21080002");
+});
+
+test("an older saved list still loads", () => {
+  const loaded = loadState([row(21080000, "0.650000")]);
+  assert.equal(loaded.observations.length, 1);
+  assert.deepEqual(loaded.marks, []);
 });

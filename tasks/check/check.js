@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { checkRequest } from "../../lib/check.js";
+import { loadState, note } from "../../public/trend.js";
 
 function arg(name, fallback = "") {
   const index = process.argv.indexOf(name);
@@ -7,22 +8,22 @@ function arg(name, fallback = "") {
 }
 
 const file = new URL("../../data/trend.json", import.meta.url);
-let observations = [];
+let saved = { observations: [], marks: [] };
 try {
-  observations = JSON.parse(await readFile(file, "utf8"));
+  saved = loadState(JSON.parse(await readFile(file, "utf8"))) ?? saved;
 } catch {
-  observations = [];
+  saved = { observations: [], marks: [] };
 }
 const lang = arg("--lang") === "pt" ? "pt" : "en";
-const out = await checkRequest({
-  count: arg("--count", "3"),
-  direction: arg("--direction", "down"),
-  observations,
-  lang,
-});
+const rule = { count: arg("--count", "3"), direction: arg("--direction", "down"), minutes: arg("--minutes", "0") };
+const out = await checkRequest({ ...rule, observations: saved.observations, lang });
 if (out.ok) {
+  const next = loadState({
+    observations: out.observations,
+    marks: note({ observations: out.observations, marks: saved.marks }, rule),
+  });
   await mkdir(new URL("../../data/", import.meta.url), { recursive: true });
-  await writeFile(file, `${JSON.stringify(out.observations)}\n`);
+  await writeFile(file, `${JSON.stringify(next)}\n`);
 }
 console.log(out.headline || out.reason);
 if (out.ok) {
