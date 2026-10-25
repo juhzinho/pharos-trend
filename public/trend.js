@@ -14,8 +14,11 @@ const TEXT = {
     time: (streak, count, covered, minutes) => `The run is ${streak} of ${count} and covers ${covered} minutes. The rule needs ${minutes} minutes.`,
     act: (block, at, price) => `Confirmed at block ${block}, ${at}, price ${price} USDC.`,
     past: (block, at, price) => `The rule was met at block ${block}, ${at}, price ${price} USDC.`,
+    frozen: (from, block, at, minutes, price) => `Frozen from block ${from} to block ${block}, ${at}, ${minutes} minutes, price ${price} USDC.`,
+    miss: (block, at, streak, count) => `Stopped at block ${block}, ${at}, after ${streak} of ${count}.`,
+    missTime: (block, at, streak, count, covered, minutes) => `Stopped at block ${block}, ${at}, after ${streak} of ${count}, covering ${covered} of ${minutes} minutes.`,
     headWait: "Still waiting.",
-    headAct: "Locked once.",
+    headAct: "Window frozen.",
     down: "down",
     up: "up",
   },
@@ -30,8 +33,11 @@ const TEXT = {
     time: (streak, count, covered, minutes) => `A sequência está em ${streak} de ${count} e cobre ${covered} minutos. A regra precisa de ${minutes} minutos.`,
     act: (block, at, price) => `Confirmada no bloco ${block}, ${at}, preço ${price} USDC.`,
     past: (block, at, price) => `A regra foi atingida no bloco ${block}, ${at}, preço ${price} USDC.`,
+    frozen: (from, block, at, minutes, price) => `Janela travada do bloco ${from} ao bloco ${block}, ${at}, ${minutes} minutos, preço ${price} USDC.`,
+    miss: (block, at, streak, count) => `Parou no bloco ${block}, ${at}, em ${streak} de ${count}.`,
+    missTime: (block, at, streak, count, covered, minutes) => `Parou no bloco ${block}, ${at}, em ${streak} de ${count}, com ${covered} de ${minutes} minutos.`,
     headWait: "Ainda esperando.",
-    headAct: "Travou uma vez.",
+    headAct: "Janela travada.",
     down: "quedas",
     up: "altas",
   },
@@ -79,14 +85,17 @@ function sanitizeMarks(value, observations) {
     if (!parsed || !row) continue;
     const key = `${row.block}:${parsed.count}:${parsed.direction}:${parsed.minutes}`;
     if (out.some((item) => `${item.block}:${item.count}:${item.direction}:${item.minutes}` === key)) continue;
-    out.push({
+    const from = mark.from == null ? "" : String(mark.from);
+    const stored = {
       block: row.block,
       price: row.price,
       at: row.at,
       count: parsed.count,
       direction: parsed.direction,
       minutes: parsed.minutes,
-    });
+    };
+    if (BLOCK.test(from) && byBlock.has(from) && BigInt(from) <= BigInt(row.block)) stored.from = from;
+    out.push(stored);
   }
   return out;
 }
@@ -126,6 +135,18 @@ export function runLength(observations, direction) {
 
 export function moment(at) {
   return `${at.slice(0, 19).replace("T", " ")} UTC`;
+}
+
+function onward(prev, row, direction) {
+  const before = units(prev.price);
+  const after = units(row.price);
+  return direction === "down" ? after < before : after > before;
+}
+
+function streakStart(observations, end, direction) {
+  let start = end;
+  while (start > 0 && onward(observations[start - 1], observations[start], direction)) start -= 1;
+  return start;
 }
 
 function coveredMinutes(start, end) {
@@ -178,6 +199,8 @@ export function note(state, rule) {
   if (!viewed.ok || !viewed.metAt) return marks;
   const same = marks.some((mark) => mark.block === viewed.metAt.block && mark.count === viewed.count && mark.direction === viewed.direction && mark.minutes === viewed.minutes);
   if (same) return marks;
+  const end = viewed.observations.findIndex((row) => row.block === viewed.metAt.block);
+  const start = streakStart(viewed.observations, end, viewed.direction);
   return [...marks, {
     block: viewed.metAt.block,
     price: viewed.metAt.price,
@@ -185,6 +208,7 @@ export function note(state, rule) {
     count: viewed.count,
     direction: viewed.direction,
     minutes: viewed.minutes,
+    from: viewed.observations[start].block,
   }];
 }
 
@@ -196,11 +220,88 @@ export function remembered(marks, rule, lang = "en") {
 
 function moveRole(prev, row, direction) {
   if (!prev) return "open";
-  const before = units(prev.price);
-  const after = units(row.price);
-  if (before === after) return "flat";
-  const onward = direction === "down" ? after < before : after > before;
-  return onward ? "step" : "spike";
+  if (units(prev.price) === units(row.price)) return "flat";
+  return onward(prev, row, direction) ? "step" : "spike";
+}
+
+function pane(observations, start, end) {
+  const rows = observations.slice(start, end + 1);
+  const last = rows.at(-1);
+  return {
+    from: rows[0].block,
+    block: last.block,
+    at: last.at,
+    price: last.price,
+    minutes: coveredMinutes(rows[0], last),
+    rows,
+  };
+}
+
+export function windowOf(observations, mark) {
+  const end = observations.findIndex((row) => row.block === String(mark.block));
+  if (end < 0 || (mark.direction !== "down" && mark.direction !== "up")) return null;
+  let start = mark.from ? observations.findIndex((row) => row.block === String(mark.from)) : -1;
+  if (start < 0 || start > end) start = streakStart(observations, end, mark.direction);
+  return pane(observations, start, end);
+}
+
+export function windows(observations, rule, marks = []) {
+  const viewed = review(observations, rule);
+  if (!viewed.ok) return [];
+  const found = remembered(marks, rule);
+  const panes = [];
+  for (const mark of found) {
+    const frozen = windowOf(observations, mark);
+    if (frozen && !panes.some((item) => item.block === frozen.block)) panes.push(frozen);
+  }
+  if (viewed.metAt && !panes.some((item) => item.block === viewed.metAt.block)) {
+    const end = observations.findIndex((row) => row.block === viewed.metAt.block);
+    panes.push(pane(observations, streakStart(observations, end, viewed.direction), end));
+  }
+  return panes;
+}
+
+export function misses(observations, rule) {
+  const parsed = parseRule(rule?.count, rule?.direction, rule?.minutes);
+  if (!parsed || observations.length < 2) return [];
+  const out = [];
+  let start = 0;
+  while (start < observations.length) {
+    let end = start;
+    while (end + 1 < observations.length && onward(observations[end], observations[end + 1], parsed.direction)) end += 1;
+    const streak = end - start + 1;
+    const broke = observations[end + 1];
+    if (broke && streak >= 2) {
+      const slice = observations.slice(start, end + 1);
+      const metAt = confirmation(slice, streak, parsed.count, parsed.minutes);
+      if (!metAt) {
+        out.push({
+          block: broke.block,
+          at: broke.at,
+          price: broke.price,
+          from: observations[start].block,
+          streak,
+          covered: coveredMinutes(observations[start], observations[end]),
+        });
+      }
+    }
+    start = end + 1;
+  }
+  return out;
+}
+
+export function windowLine(paneRow, lang = "en") {
+  return text(lang).frozen(paneRow.from, paneRow.block, moment(paneRow.at), paneRow.minutes, paneRow.price);
+}
+
+export function missLine(miss, rule, lang = "en") {
+  const parsed = parseRule(rule?.count, rule?.direction, rule?.minutes);
+  const t = text(lang);
+  const when = moment(miss.at);
+  if (parsed && parsed.minutes > 0 && miss.streak >= parsed.count) {
+    return t.missTime(miss.block, when, miss.streak, parsed.count, miss.covered, parsed.minutes);
+  }
+  return t.miss(miss.block, when, miss.streak, parsed ? parsed.count : miss.streak);
 }
 
 export function journal(observations, rule, marks = []) {
@@ -208,9 +309,11 @@ export function journal(observations, rule, marks = []) {
   if (!viewed.ok) return viewed;
   const locks = new Set(remembered(marks, rule).map((mark) => mark.block));
   if (viewed.metAt) locks.add(viewed.metAt.block);
+  const held = new Set(windows(observations, rule, marks).flatMap((item) => item.rows.map((row) => row.block)));
   const rows = observations.map((row, index) => ({
     ...row,
     role: locks.has(row.block) ? "lock" : moveRole(observations[index - 1], row, viewed.direction),
+    held: held.has(row.block),
   }));
   return { ...viewed, rows };
 }

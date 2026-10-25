@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buttonLabel, EXAMPLES } from "../public/examples.js";
-import { append, journal, loadState, moment, note, parseRule, review, runLength, sanitize } from "../public/trend.js";
+import { append, journal, loadState, misses, missLine, moment, note, parseRule, review, runLength, sanitize, windowLine, windows } from "../public/trend.js";
 
 function row(block, price) {
   return { block: String(block), price, at: "2026-10-24T02:25:00.000Z" };
@@ -164,6 +164,59 @@ test("a spike is named and does not lock, and three downs lock once", () => {
   assert.equal(broken.rows[2].role, "lock");
   assert.equal(broken.rows[3].role, "spike");
   assert.equal(broken.decision, "wait");
+});
+
+test("a confirmed run freezes and a later check stays outside it", () => {
+  const rule = { count: "3", direction: "down", minutes: "0" };
+  const prices = ["1.000000", "0.990000", "0.980000", "0.970000", "1.050000"];
+  const observations = prices.map((price, index) => row(21080300 + index, price));
+  const marks = note({ observations: observations.slice(0, 3), marks: [] }, rule);
+  assert.equal(marks[0].from, "21080300");
+  assert.equal(marks[0].block, "21080302");
+  const panes = windows(observations, rule, marks);
+  assert.equal(panes.length, 1);
+  assert.deepEqual(panes[0].rows.map((item) => item.block), ["21080300", "21080301", "21080302"]);
+  assert.equal(panes[0].minutes, 0);
+  assert.match(windowLine(panes[0], "en"), /Frozen from block 21080300 to block 21080302/);
+  assert.match(windowLine(panes[0], "pt"), /Janela travada do bloco 21080300 ao bloco 21080302/);
+  const named = journal(observations, rule, marks);
+  assert.deepEqual(named.rows.map((item) => item.held), [true, true, true, false, false]);
+  assert.equal(named.rows[2].role, "lock");
+  assert.equal(named.rows[4].role, "spike");
+  const loaded = loadState(JSON.parse(JSON.stringify({ observations, marks })));
+  assert.equal(loaded.marks[0].from, "21080300");
+  const rebuilt = windows(loaded.observations, rule, loaded.marks.map(({ from, ...mark }) => mark));
+  assert.deepEqual(rebuilt[0].rows.map((item) => item.block), ["21080300", "21080301", "21080302"]);
+});
+
+test("two downs and a spike are kept as a broken run", () => {
+  const rule = { count: "3", direction: "down", minutes: "0" };
+  const observations = ["1.000000", "0.990000", "1.020000"].map((price, index) => row(21080400 + index, price));
+  const broken = misses(observations, rule);
+  assert.equal(broken.length, 1);
+  assert.equal(broken[0].streak, 2);
+  assert.equal(broken[0].block, "21080402");
+  assert.equal(windows(observations, rule, []).length, 0);
+  assert.match(missLine(broken[0], rule, "en"), /Stopped at block 21080402/);
+  assert.match(missLine(broken[0], rule, "en"), /2 of 3/);
+  assert.match(missLine(broken[0], rule, "pt"), /Parou no bloco 21080402/);
+  assert.match(missLine(broken[0], rule, "pt"), /2 de 3/);
+});
+
+test("a short timed run is kept when a spike breaks it", () => {
+  const rule = { count: "3", direction: "down", minutes: "120" };
+  const observations = ["2026-10-24T00:00:00.000Z", "2026-10-24T00:01:00.000Z", "2026-10-24T00:02:00.000Z", "2026-10-24T00:03:00.000Z"].map((at, index) => ({
+    block: String(21080500 + index),
+    price: ["1.000000", "0.990000", "0.980000", "1.020000"][index],
+    at,
+  }));
+  const broken = misses(observations, rule);
+  assert.equal(broken.length, 1);
+  assert.equal(broken[0].streak, 3);
+  assert.equal(broken[0].covered, 2);
+  assert.equal(broken[0].block, "21080503");
+  assert.match(missLine(broken[0], rule, "en"), /2 of 120 minutes/);
+  assert.equal(windows(observations, rule, []).length, 0);
 });
 
 test("an older saved list still loads", () => {

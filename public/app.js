@@ -1,16 +1,15 @@
 import { buttonLabel, EXAMPLES } from "./examples.js";
-import { journal, loadState, moment, note, parseRule, pastLine, review } from "./trend.js";
+import { journal, loadState, missLine, misses, moment, note, parseRule, pastLine, windowLine, windows } from "./trend.js";
 
 const KEY = "pharos-trend-history";
 const $ = (id) => document.getElementById(id);
 const copy = {
   en: {
     kicker: "Trend",
-    title: "One lock.",
-    lead: "Each check of the 0.01% WPROS/USDC pool is stored and named: open, step, flat, or spike. The trend locks once, on the check that finishes your rule. A spike stays in the history and does not lock.",
+    title: "Frozen window.",
+    lead: "When your rule is met, that run freezes: the first check, each step, and the lock. A later reading stays outside it. A run that breaks is kept, with the block where it stopped.",
     source: "One source: the 0.01% WPROS/USDC pool, read again on every check.",
-    memory: "The checks and the confirmation stay in this browser. A reload does not erase them or record the same block twice.",
-    strict: "A flat price or the opposite direction breaks the run. One reading never confirms it.",
+    memory: "The checks, the frozen window, and a broken run stay in this browser. A reload does not erase them or record the same block twice.",
     noWait: "No minimum time. The checks alone can confirm the run.",
     wait: (minutes) => `The run must cover at least ${minutes} minutes, from its first check to the confirmation.`,
     checks: (count, direction) => `${direction} · ${count} checks in a row`,
@@ -27,6 +26,8 @@ const copy = {
     empty: "No checks are stored yet.",
     met: "Lock",
     run: "Run",
+    window: "Frozen window",
+    broken: "Broken run",
     open: "Open",
     step: "Step",
     flat: "Flat",
@@ -34,11 +35,10 @@ const copy = {
   },
   pt: {
     kicker: "Tendência",
-    title: "Uma trava.",
-    lead: "Cada leitura da pool WPROS/USDC de 0,01% fica guardada com um nome: abertura, passo, igual ou salto. A tendência trava uma vez, na leitura que completa a sua regra. Um salto fica no histórico e não trava.",
+    title: "Janela travada.",
+    lead: "Quando a sua regra se completa, essa sequência congela: a primeira leitura, cada passo e a trava. Uma leitura depois fica fora dela. Uma sequência que quebra fica guardada, com o bloco em que parou.",
     source: "Uma fonte: a pool WPROS/USDC de 0,01%, lida de novo em cada leitura.",
-    memory: "As leituras e a confirmação ficam neste navegador. Recarregar não apaga o histórico nem grava o mesmo bloco duas vezes.",
-    strict: "Um preço igual ou na direção oposta quebra a sequência. Uma leitura nunca confirma.",
+    memory: "As leituras, a janela travada e a sequência quebrada ficam neste navegador. Recarregar não apaga o histórico nem grava o mesmo bloco duas vezes.",
     noWait: "Sem tempo mínimo. As leituras sozinhas podem confirmar a sequência.",
     wait: (minutes) => `A sequência precisa cobrir pelo menos ${minutes} minutos, da primeira leitura até a confirmação.`,
     checks: (count, direction) => `${direction} · ${count} leituras seguidas`,
@@ -55,6 +55,8 @@ const copy = {
     empty: "Ainda não há leituras guardadas.",
     met: "Trava",
     run: "Sequência",
+    window: "Janela travada",
+    broken: "Sequência quebrada",
     open: "Abertura",
     step: "Passo",
     flat: "Igual",
@@ -95,12 +97,8 @@ function paint() {
     lines.push(text.checks(parsed.count, parsed.direction === "down" ? text.down : text.up));
     lines.push(parsed.minutes === 0 ? text.noWait : text.wait(parsed.minutes));
   }
-  lines.push(text.strict, text.memory);
-  $("rules").replaceChildren(...lines.map((line) => {
-    const span = document.createElement("span");
-    span.textContent = line;
-    return span;
-  }));
+  lines.push(text.memory);
+  $("rules").textContent = lines.join(" ");
   $("directionL").textContent = text.direction;
   $("countL").textContent = text.count;
   $("minutesL").textContent = text.minutes;
@@ -154,6 +152,32 @@ function render(noteText = "") {
       when.textContent = earlier;
       box.append(when);
     }
+    const panes = windows(saved.observations, current, saved.marks);
+    if (panes.length) {
+      const label = document.createElement("p");
+      label.className = "log-label";
+      label.textContent = text.window;
+      box.append(label);
+      for (const item of panes) {
+        const line = document.createElement("p");
+        line.className = "detail";
+        line.textContent = windowLine(item, lang);
+        box.append(line);
+      }
+    }
+    const broken = misses(saved.observations, current);
+    if (broken.length) {
+      const label = document.createElement("p");
+      label.className = "log-label";
+      label.textContent = text.broken;
+      box.append(label);
+      for (const miss of broken) {
+        const line = document.createElement("p");
+        line.className = "miss";
+        line.textContent = missLine(miss, current, lang);
+        box.append(line);
+      }
+    }
     $("out").replaceChildren(box);
   }
   const rows = viewed.ok ? viewed.rows : saved.observations.map((row) => ({ ...row, role: "open" }));
@@ -166,7 +190,7 @@ function render(noteText = "") {
   }
   $("history").replaceChildren(...rows.map((row, index) => {
     const item = document.createElement("article");
-    item.className = `check ${row.role}`;
+    item.className = `check ${row.role}${row.held ? " held" : ""}`;
     const price = document.createElement("strong");
     price.textContent = `${index + 1} · ${row.price} USDC`;
     const when = document.createElement("span");

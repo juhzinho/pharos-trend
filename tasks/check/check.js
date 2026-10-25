@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { checkRequest } from "../../lib/check.js";
-import { loadState, note } from "../../public/trend.js";
+import { loadState, missLine, misses, note, windowLine, windows } from "../../public/trend.js";
 
 function arg(name, fallback = "") {
   const index = process.argv.indexOf(name);
@@ -30,4 +30,6 @@ if (out.ok) {
   for (const row of out.observations) console.log(`${row.block}  ${row.price} USDC  ${row.at}`);
   console.log(`${out.decision} · ${out.reason}`);
   if (out.metAt) console.log(`met ${out.metAt.block} ${out.metAt.at}`);
+  for (const item of windows(next.observations, rule, next.marks)) console.log(windowLine(item, lang));
+  for (const miss of misses(next.observations, rule)) console.log(missLine(miss, rule, lang));
 }
