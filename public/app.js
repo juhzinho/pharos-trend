@@ -1,13 +1,13 @@
 import { buttonLabel, EXAMPLES } from "./examples.js";
-import { loadState, moment, note, parseRule, pastLine, remembered, review } from "./trend.js";
+import { journal, loadState, moment, note, parseRule, pastLine, review } from "./trend.js";
 
 const KEY = "pharos-trend-history";
 const $ = (id) => document.getElementById(id);
 const copy = {
   en: {
     kicker: "Trend",
-    title: "Remember the checks.",
-    lead: "Each check reads the 0.01% WPROS/USDC pool and stores the price. You set the direction, how many checks in a row, and how many minutes that run must cover. The minimum is 3 checks. One jump does not count.",
+    title: "One lock.",
+    lead: "Each check of the 0.01% WPROS/USDC pool is stored and named: open, step, flat, or spike. The trend locks once, on the check that finishes your rule. A spike stays in the history and does not lock.",
     source: "One source: the 0.01% WPROS/USDC pool, read again on every check.",
     memory: "The checks and the confirmation stay in this browser. A reload does not erase them or record the same block twice.",
     strict: "A flat price or the opposite direction breaks the run. One reading never confirms it.",
@@ -25,13 +25,17 @@ const copy = {
     stored: "This block is already stored.",
     history: "Stored history",
     empty: "No checks are stored yet.",
-    met: "Met",
+    met: "Lock",
     run: "Run",
+    open: "Open",
+    step: "Step",
+    flat: "Flat",
+    spike: "Spike",
   },
   pt: {
     kicker: "Tendência",
-    title: "Lembrar as leituras.",
-    lead: "Cada leitura olha a pool WPROS/USDC de 0,01% e guarda o preço. Você escolhe a direção, quantas leituras seguidas e quantos minutos essa sequência precisa cobrir. O mínimo é 3 leituras. Um salto não conta.",
+    title: "Uma trava.",
+    lead: "Cada leitura da pool WPROS/USDC de 0,01% fica guardada com um nome: abertura, passo, igual ou salto. A tendência trava uma vez, na leitura que completa a sua regra. Um salto fica no histórico e não trava.",
     source: "Uma fonte: a pool WPROS/USDC de 0,01%, lida de novo em cada leitura.",
     memory: "As leituras e a confirmação ficam neste navegador. Recarregar não apaga o histórico nem grava o mesmo bloco duas vezes.",
     strict: "Um preço igual ou na direção oposta quebra a sequência. Uma leitura nunca confirma.",
@@ -49,8 +53,12 @@ const copy = {
     stored: "Este bloco já está guardado.",
     history: "Histórico guardado",
     empty: "Ainda não há leituras guardadas.",
-    met: "Confirmada",
+    met: "Trava",
     run: "Sequência",
+    open: "Abertura",
+    step: "Passo",
+    flat: "Igual",
+    spike: "Salto",
   },
 };
 
@@ -118,8 +126,7 @@ function render(noteText = "") {
   const text = t();
   const saved = state();
   const current = rule();
-  const viewed = review(saved.observations, current, lang);
-  const marks = remembered(saved.marks, current);
+  const viewed = journal(saved.observations, current, saved.marks);
   $("status").textContent = noteText;
   const box = document.createElement("article");
   if (!viewed.ok) {
@@ -149,7 +156,7 @@ function render(noteText = "") {
     }
     $("out").replaceChildren(box);
   }
-  const rows = viewed.ok ? viewed.observations : saved.observations;
+  const rows = viewed.ok ? viewed.rows : saved.observations.map((row) => ({ ...row, role: "open" }));
   if (!rows.length) {
     const empty = document.createElement("p");
     empty.className = "detail";
@@ -157,21 +164,16 @@ function render(noteText = "") {
     $("history").replaceChildren(empty);
     return;
   }
-  const marked = new Set(marks.map((mark) => mark.block));
   $("history").replaceChildren(...rows.map((row, index) => {
     const item = document.createElement("article");
-    const hit = marked.has(row.block);
-    item.className = hit ? "check met" : "check";
+    item.className = `check ${row.role}`;
     const price = document.createElement("strong");
     price.textContent = `${index + 1} · ${row.price} USDC`;
     const when = document.createElement("span");
     when.textContent = `${row.block} · ${moment(row.at)}`;
-    item.append(price, when);
-    if (hit) {
-      const flag = document.createElement("em");
-      flag.textContent = text.met;
-      item.append(flag);
-    }
+    const flag = document.createElement("em");
+    flag.textContent = text[row.role] || text.open;
+    item.append(price, when, flag);
     return item;
   }));
 }

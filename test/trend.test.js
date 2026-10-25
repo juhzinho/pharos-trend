@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buttonLabel, EXAMPLES } from "../public/examples.js";
-import { append, loadState, moment, note, parseRule, review, runLength, sanitize } from "../public/trend.js";
+import { append, journal, loadState, moment, note, parseRule, review, runLength, sanitize } from "../public/trend.js";
 
 function row(block, price) {
   return { block: String(block), price, at: "2026-10-24T02:25:00.000Z" };
@@ -148,6 +148,22 @@ test("three checks spread over two hours confirm on the later check", () => {
   const out = review(observations, { count: "3", direction: "down", minutes: "120" });
   assert.equal(out.decision, "act");
   assert.equal(out.metAt.block, "21080002");
+});
+
+test("a spike is named and does not lock, and three downs lock once", () => {
+  const rule = { count: "3", direction: "down", minutes: "0" };
+  const spike = ["1.000000", "0.900000", "1.100000"].map((price, index) => row(21080100 + index, price));
+  const named = journal(spike, rule, []);
+  assert.deepEqual(named.rows.map((row) => row.role), ["open", "step", "spike"]);
+  assert.equal(named.decision, "wait");
+  const downs = ["1.000000", "0.990000", "0.980000", "0.970000"].map((price, index) => row(21080200 + index, price));
+  const locked = journal(downs, rule, []);
+  assert.deepEqual(locked.rows.map((row) => row.role), ["open", "step", "lock", "step"]);
+  const marks = note({ observations: downs.slice(0, 3), marks: [] }, rule);
+  const broken = journal([...downs.slice(0, 3), row(21080203, "1.050000")], rule, marks);
+  assert.equal(broken.rows[2].role, "lock");
+  assert.equal(broken.rows[3].role, "spike");
+  assert.equal(broken.decision, "wait");
 });
 
 test("an older saved list still loads", () => {

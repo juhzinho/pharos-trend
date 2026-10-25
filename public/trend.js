@@ -15,7 +15,7 @@ const TEXT = {
     act: (block, at, price) => `Confirmed at block ${block}, ${at}, price ${price} USDC.`,
     past: (block, at, price) => `The rule was met at block ${block}, ${at}, price ${price} USDC.`,
     headWait: "Still waiting.",
-    headAct: "The trend is confirmed.",
+    headAct: "Locked once.",
     down: "down",
     up: "up",
   },
@@ -31,7 +31,7 @@ const TEXT = {
     act: (block, at, price) => `Confirmada no bloco ${block}, ${at}, preço ${price} USDC.`,
     past: (block, at, price) => `A regra foi atingida no bloco ${block}, ${at}, preço ${price} USDC.`,
     headWait: "Ainda esperando.",
-    headAct: "A tendência está confirmada.",
+    headAct: "Travou uma vez.",
     down: "quedas",
     up: "altas",
   },
@@ -192,6 +192,27 @@ export function remembered(marks, rule, lang = "en") {
   const parsed = parseRule(rule?.count, rule?.direction, rule?.minutes);
   if (!parsed || !Array.isArray(marks)) return [];
   return marks.filter((mark) => mark.count === parsed.count && mark.direction === parsed.direction && mark.minutes === parsed.minutes);
+}
+
+function moveRole(prev, row, direction) {
+  if (!prev) return "open";
+  const before = units(prev.price);
+  const after = units(row.price);
+  if (before === after) return "flat";
+  const onward = direction === "down" ? after < before : after > before;
+  return onward ? "step" : "spike";
+}
+
+export function journal(observations, rule, marks = []) {
+  const viewed = review(observations, rule);
+  if (!viewed.ok) return viewed;
+  const locks = new Set(remembered(marks, rule).map((mark) => mark.block));
+  if (viewed.metAt) locks.add(viewed.metAt.block);
+  const rows = observations.map((row, index) => ({
+    ...row,
+    role: locks.has(row.block) ? "lock" : moveRole(observations[index - 1], row, viewed.direction),
+  }));
+  return { ...viewed, rows };
 }
 
 export function pastLine(marks, rule, lang = "en") {

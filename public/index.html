@@ -47,10 +47,13 @@
     .log-label { margin: 14px 0 0; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
     .history { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .check { border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; }
-    .check.met { border-color: rgba(125,231,196,.7); }
     .check strong { display: block; }
     .check span, .check em { color: var(--muted); font-style: normal; }
-    .check.met em { color: var(--mint); }
+    .check.spike { border-color: rgba(255,143,122,.75); }
+    .check.spike em { color: var(--coral); }
+    .check.lock { border-color: rgba(125,231,196,.75); }
+    .check.lock em { color: var(--mint); }
+    .check.step em { color: var(--blue); }
     @media (max-width: 900px) {
       header { padding: 12px 16px; }
       main { grid-template-columns: 1fr; align-items: start; padding: 64px 16px 16px; gap: 12px; }
