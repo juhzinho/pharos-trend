@@ -94,7 +94,7 @@ function rule() {
 function applyTheme() {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("pharos-trend-theme", theme);
-  for (const button of document.querySelectorAll("[data-theme]")) {
+  for (const button of document.querySelectorAll(".theme [data-theme]")) {
     button.textContent = button.dataset.theme === "dark" ? t().dark : t().light;
     button.classList.toggle("on", button.dataset.theme === theme);
   }
@@ -227,7 +227,7 @@ $("chips").addEventListener("click", (event) => {
   paint();
 });
 
-for (const button of document.querySelectorAll("[data-theme]")) {
+for (const button of document.querySelectorAll(".theme [data-theme]")) {
   button.addEventListener("click", () => {
     theme = button.dataset.theme === "dark" ? "dark" : "light";
     applyTheme();
