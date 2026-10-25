@@ -24,7 +24,7 @@ const copy = {
     stored: "This block is already stored.",
     history: "Stored history",
     empty: "No checks are stored yet.",
-    met: "Lock",
+    lock: "Lock",
     run: "Run",
     window: "Frozen window",
     broken: "Broken run",
@@ -32,6 +32,8 @@ const copy = {
     step: "Step",
     flat: "Flat",
     spike: "Spike",
+    light: "Light",
+    dark: "Dark",
   },
   pt: {
     kicker: "Tendência",
@@ -53,7 +55,7 @@ const copy = {
     stored: "Este bloco já está guardado.",
     history: "Histórico guardado",
     empty: "Ainda não há leituras guardadas.",
-    met: "Trava",
+    lock: "Trava",
     run: "Sequência",
     window: "Janela travada",
     broken: "Sequência quebrada",
@@ -61,10 +63,13 @@ const copy = {
     step: "Passo",
     flat: "Igual",
     spike: "Salto",
+    light: "Claro",
+    dark: "Escuro",
   },
 };
 
 let lang = localStorage.getItem("pharos-trend-lang") === "pt" ? "pt" : "en";
+let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 
 function t() {
   return copy[lang];
@@ -84,6 +89,15 @@ function save(next) {
 
 function rule() {
   return { count: $("count").value, direction: $("direction").value, minutes: $("minutes").value };
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("pharos-trend-theme", theme);
+  for (const button of document.querySelectorAll("[data-theme]")) {
+    button.textContent = button.dataset.theme === "dark" ? t().dark : t().light;
+    button.classList.toggle("on", button.dataset.theme === theme);
+  }
 }
 
 function paint() {
@@ -107,6 +121,7 @@ function paint() {
   $("go").textContent = text.go;
   $("logLabel").textContent = text.history;
   document.documentElement.lang = lang;
+  applyTheme();
   for (const button of document.querySelectorAll(".lang button")) button.classList.toggle("on", button.dataset.lang === lang);
   $("chips").replaceChildren(...EXAMPLES.map((row) => {
     const button = document.createElement("button");
@@ -180,7 +195,7 @@ function render(noteText = "") {
     }
     $("out").replaceChildren(box);
   }
-  const rows = viewed.ok ? viewed.rows : saved.observations.map((row) => ({ ...row, role: "open" }));
+  const rows = viewed.ok ? viewed.rows : saved.observations;
   if (!rows.length) {
     const empty = document.createElement("p");
     empty.className = "detail";
@@ -190,13 +205,13 @@ function render(noteText = "") {
   }
   $("history").replaceChildren(...rows.map((row, index) => {
     const item = document.createElement("article");
-    item.className = `check ${row.role}${row.held ? " held" : ""}`;
+    item.className = ["check", row.role, row.held ? "held" : ""].filter(Boolean).join(" ");
     const price = document.createElement("strong");
     price.textContent = `${index + 1} · ${row.price} USDC`;
     const when = document.createElement("span");
     when.textContent = `${row.block} · ${moment(row.at)}`;
     const flag = document.createElement("em");
-    flag.textContent = text[row.role] || text.open;
+    flag.textContent = text[row.role] || "";
     item.append(price, when, flag);
     return item;
   }));
@@ -211,6 +226,13 @@ $("chips").addEventListener("click", (event) => {
   $("minutes").value = row.minutes;
   paint();
 });
+
+for (const button of document.querySelectorAll("[data-theme]")) {
+  button.addEventListener("click", () => {
+    theme = button.dataset.theme === "dark" ? "dark" : "light";
+    applyTheme();
+  });
+}
 
 for (const button of document.querySelectorAll(".lang button")) {
   button.addEventListener("click", () => {

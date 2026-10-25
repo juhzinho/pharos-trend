@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { checkRequest } from "../lib/check.js";
 import { buttonLabel, EXAMPLES } from "../public/examples.js";
 import { append, journal, loadState, misses, missLine, moment, note, parseRule, review, runLength, sanitize, windowLine, windows } from "../public/trend.js";
 
@@ -217,6 +218,49 @@ test("a short timed run is kept when a spike breaks it", () => {
   assert.equal(broken[0].block, "21080503");
   assert.match(missLine(broken[0], rule, "en"), /2 of 120 minutes/);
   assert.equal(windows(observations, rule, []).length, 0);
+});
+
+test("the check keeps the minute rule and rejects a bad price", async () => {
+  const observations = ["2026-10-24T02:00:00.000Z", "2026-10-24T02:01:00.000Z", "2026-10-24T02:02:00.000Z"].map((at, index) => ({
+    block: String(21080600 + index),
+    price: ["1.000000", "0.990000", "0.980000"][index],
+    at,
+  }));
+  const quick = await checkRequest({
+    count: "3",
+    direction: "down",
+    minutes: "120",
+    observations,
+  }, async () => ({ block: "21080603", price: "0.970000", at: "2026-10-24T02:03:00.000Z" }));
+  assert.equal(quick.decision, "wait");
+  assert.equal(quick.added, true);
+  const later = await checkRequest({
+    count: "3",
+    direction: "down",
+    minutes: "120",
+    observations,
+  }, async () => ({ block: "21080603", price: "0.970000", at: "2026-10-24T04:00:00.000Z" }));
+  assert.equal(later.decision, "act");
+  assert.equal(later.metAt.block, "21080603");
+  const plain = await checkRequest({
+    count: "3",
+    direction: "down",
+    observations: observations.slice(0, 2),
+  }, async () => observations[2]);
+  assert.equal(plain.decision, "act");
+  const bad = await checkRequest({
+    count: "3",
+    direction: "down",
+    observations,
+  }, async () => ({ block: "21080603", price: "0.97", at: "2026-10-24T02:03:00.000Z" }));
+  assert.equal(bad.ok, false);
+  const same = await checkRequest({
+    count: "3",
+    direction: "down",
+    observations,
+  }, async () => observations.at(-1));
+  assert.equal(same.added, false);
+  assert.equal(same.observations.length, 3);
 });
 
 test("an older saved list still loads", () => {

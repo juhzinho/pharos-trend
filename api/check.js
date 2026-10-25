@@ -17,6 +17,7 @@ export default async function handler(req, res) {
     const out = await checkRequest({
       count: body.count,
       direction: body.direction,
+      minutes: body.minutes,
       observations: body.observations,
       lang: body.lang === "pt" ? "pt" : "en",
     });

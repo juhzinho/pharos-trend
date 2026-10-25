@@ -6,17 +6,19 @@
   <title>Pharos Trend</title>
   <meta name="description" content="Store each WPROS/USDC check and act only after a configurable run of at least 3 observations." />
   <style>
-    :root { --ink: #1c2433; --muted: #5c6b82; --blue: #2457d6; --coral: #b23b2e; --mint: #0d7a56; --line: #e4e8f0; --paper: #fff; }
+    :root { --page: #f6f7fb; --ink: #1c2433; --muted: #5c6b82; --blue: #2457d6; --coral: #b23b2e; --mint: #0d7a56; --line: #e4e8f0; --paper: #fff; --on: #1c2433; --on-ink: #fff; --btn-ink: #fff; --held: #b7e2d2; color-scheme: light; }
+    html[data-theme="dark"] { --page: #101626; --ink: #f3f6ff; --muted: #b7c0da; --blue: #8eb6ff; --coral: #ff8f7a; --mint: #7de7c4; --line: rgba(255,255,255,.16); --paper: #182033; --on: #f3f6ff; --on-ink: #172033; --btn-ink: #172033; --held: rgba(125,231,196,.7); color-scheme: dark; }
     * { box-sizing: border-box; }
     html, body { margin: 0; }
-    body { color: var(--ink); background: #f6f7fb; font: 16px/1.45 system-ui, sans-serif; }
+    body { color: var(--ink); background: var(--page); font: 16px/1.45 system-ui, sans-serif; }
     header, main { width: min(640px, calc(100% - 32px)); margin: 0 auto; }
-    header { display: flex; align-items: center; padding: 20px 0 0; }
+    header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 20px 0 0; }
     .brand { color: inherit; text-decoration: none; letter-spacing: .14em; font-size: 13px; font-weight: 700; }
     .brand b { color: var(--blue); }
-    .lang { margin-left: auto; display: flex; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
-    .lang button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; cursor: pointer; font: 700 12px system-ui, sans-serif; }
-    .lang button.on { background: var(--ink); color: #fff; }
+    .tools { margin-left: auto; display: flex; gap: 8px; }
+    .lang, .theme { display: flex; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+    .lang button, .theme button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; cursor: pointer; font: 700 12px system-ui, sans-serif; }
+    .lang button.on, .theme button.on { background: var(--on); color: var(--on-ink); }
     main { padding: 20px 0 40px; }
     .kicker { margin: 0 0 6px; letter-spacing: .14em; text-transform: uppercase; font-size: 12px; color: var(--blue); }
     h1 { margin: 0; font-size: 32px; line-height: 1.1; font-weight: 700; }
@@ -27,12 +29,12 @@
     .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .chips button, input, select, button { font: inherit; color: var(--ink); }
     .chips button { border: 1px solid var(--line); background: var(--paper); color: var(--muted); border-radius: 999px; padding: 8px 12px; cursor: pointer; }
-    .chips button.on { color: #fff; background: var(--blue); border-color: transparent; }
+    .chips button.on { color: var(--btn-ink); background: var(--blue); border-color: transparent; }
     label { display: block; margin: 12px 0 4px; font-size: 12px; color: var(--muted); }
     input, select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); }
     .grid { display: grid; grid-template-columns: 1.3fr .7fr .8fr; gap: 8px; }
     .row { display: flex; margin-top: 12px; }
-    .btn { border: 0; border-radius: 999px; padding: 10px 16px; background: var(--blue); color: #fff; font-weight: 700; cursor: pointer; }
+    .btn { border: 0; border-radius: 999px; padding: 10px 16px; background: var(--blue); color: var(--btn-ink); font-weight: 700; cursor: pointer; }
     .btn:disabled { opacity: .55; }
     .status { margin: 12px 0 0; min-height: 0; color: var(--muted); }
     .card { margin-top: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
@@ -50,17 +52,23 @@
     .check.spike em { color: var(--coral); }
     .check.lock em { color: var(--mint); }
     .check.step em { color: var(--blue); }
-    .check.held { border-color: #b7e2d2; }
+    .check.held { border-color: var(--held); }
     .miss { margin: 4px 0 0; color: var(--coral); }
     @media (max-width: 640px) {
       .grid { grid-template-columns: 1fr; }
     }
   </style>
+  <script>
+    try { if (localStorage.getItem("pharos-trend-theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}
+  </script>
 </head>
 <body>
   <header>
     <a class="brand" href="/"><b>PHAROS</b> TREND</a>
-    <div class="lang"><button type="button" data-lang="en">EN</button><button type="button" data-lang="pt">PT</button></div>
+    <div class="tools">
+      <div class="theme"><button type="button" data-theme="light"></button><button type="button" data-theme="dark"></button></div>
+      <div class="lang"><button type="button" data-lang="en">EN</button><button type="button" data-lang="pt">PT</button></div>
+    </div>
   </header>
   <main>
     <section class="hero">
